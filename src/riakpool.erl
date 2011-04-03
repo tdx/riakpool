@@ -32,19 +32,19 @@ count() ->
         undefined -> 0
     end.
 
-%% @spec execute(Fun) -> {ok, Value::any()} | error
+%% @spec execute(Fun) -> Value::any() | {'error',Reason:term()}
 %%       Fun = function(pid())
 %% @doc Finds the next available connection pid from the pool and calls
-%% `Fun(Pid)'. Returns `{ok, Value}' if the call was successful, and `error'
-%% otherwise. If no connection could be found, a new connection will be
-%% established.
+%% `Fun(Pid)'. Returns `Value' if the call was successful, and
+%% {`error',Reason:term()} otherwise. If no connection could be found,
+%% a new connection will be established.
 execute(Fun) ->
     case gen_server:call(?MODULE, check_out) of
         {ok, Pid} ->
-            try {ok, Fun(Pid)}
-            catch _:_ -> error
+            try Fun(Pid)
+            catch _:Reason -> {error,Reason}
             after gen_server:cast(?MODULE, {check_in, Pid}) end;
-        error -> error
+        {error,_}=Error -> Error
     end.
 
 %% @spec start_link() -> {ok, pid()} | {error, any()}
@@ -65,7 +65,7 @@ init([]) ->
 handle_call(check_out, _From, Pids) ->
     case next_pid(Pids) of
         {ok, Pid, NewPids} -> {reply, {ok, Pid}, NewPids};
-        {error, NewPids} -> {reply, error, NewPids}
+        {error, NewPids} -> {reply, {error,connect_failed}, NewPids}
     end;
 handle_call(_Request, _From, State) -> {reply, ok, State}.
 
